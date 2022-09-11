@@ -30,6 +30,33 @@ class Parser {
     };
     return this.parserStateTransformerFn(initialState);
   }
+
+  map(fn) {
+    return new Parser((parserState) => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if (nextState.isError) {
+        return nextState;
+      }
+
+      return upadateParserResult(nextState, fn(nextState.result));
+    });
+  }
+
+  errorMap(fn) {
+    return new Parser((parserState) => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if (!nextState.isError) {
+        return nextState;
+      }
+
+      return upadateParserError(
+        nextState,
+        fn(nextState.error, nextState.index)
+      );
+    });
+  }
 }
 
 const str = (s) =>
@@ -59,6 +86,74 @@ const str = (s) =>
     );
   });
 
+const lettersRegex = /^[A-z]+/;
+
+const letters = new Parser((parserState) => {
+  const { targetString, index, isError } = parserState;
+
+  if (isError) {
+    return parserState;
+  }
+
+  const slicedTarget = targetString.slice(index);
+
+  if (slicedTarget.length === 0) {
+    return upadateParserError(
+      parserState,
+      `letters: Got unexpected end of input.`
+    );
+  }
+
+  const regexMatch = slicedTarget.match(lettersRegex);
+
+  if (regexMatch) {
+    return upadateParserState(
+      parserState,
+      index + regexMatch[0].length,
+      regexMatch[0]
+    );
+  }
+
+  return upadateParserError(
+    parserState,
+    `letters: Couldn't match lettres @ index ${index}`
+  );
+});
+
+const digitsRegex = /^[0-9]+/;
+
+const digits = new Parser((parserState) => {
+  const { targetString, index, isError } = parserState;
+
+  if (isError) {
+    return parserState;
+  }
+
+  const slicedTarget = targetString.slice(index);
+
+  if (slicedTarget.length === 0) {
+    return upadateParserError(
+      parserState,
+      `digits: Got unexpected end of input.`
+    );
+  }
+
+  const regexMatch = slicedTarget.match(digitsRegex);
+
+  if (regexMatch) {
+    return upadateParserState(
+      parserState,
+      index + regexMatch[0].length,
+      regexMatch[0]
+    );
+  }
+
+  return upadateParserError(
+    parserState,
+    `digits: Couldn't match digits @ index ${index}`
+  );
+});
+
 const sequenceOf = (parsers) =>
   new Parser((parserState) => {
     if (parserState.isError) {
@@ -75,6 +170,76 @@ const sequenceOf = (parsers) =>
     return upadateParserResult(nextState, results);
   });
 
-const parser = sequenceOf([str('some'), str('string')]);
+const choice = (parsers) =>
+  new Parser((parserState) => {
+    if (parserState.isError) {
+      return parserState;
+    }
 
-console.log(parser.run('somestring'));
+    for (let p of parsers) {
+      const nextState = p.parserStateTransformerFn(parserState);
+      if (!nextState.isError) {
+        return nextState;
+      }
+    }
+
+    return upadateParserError(
+      parserState,
+      `choice: Unabled to match with any parser @ index ${parserState.index}`
+    );
+  });
+
+const many = (parser) =>
+  new Parser((parserState) => {
+    if (parserState.isError) {
+      return parserState;
+    }
+
+    let nextState = parserState;
+    const results = [];
+    let done = false;
+
+    while (!done) {
+      let testState = parser.parserStateTransformerFn(nextState);
+      if (!testState.isError) {
+        results.push(testState.result);
+        nextState = testState;
+      } else {
+        done = true;
+      }
+    }
+
+    return upadateParserResult(nextState, results);
+  });
+
+const manyOne = (parser) =>
+  new Parser((parserState) => {
+    if (parserState.isError) {
+      return parserState;
+    }
+
+    let nextState = parserState;
+    const results = [];
+    let done = false;
+
+    while (!done) {
+      const nextState = parser.parserStateTransformerFn(nextState);
+      if (!nextState.isError) {
+        results.push(nextState.result);
+      } else {
+        done = true;
+      }
+    }
+
+    if (results.length === 0) {
+      return upadateParserError(
+        parserState,
+        `manyOne: unable to match any input using parser @ index ${parserState.index}`
+      );
+    }
+
+    return upadateParserResult(nextState, results);
+  });
+
+const parser = many(choice([digits, letters]));
+console.log(parser.run('asd123'));
