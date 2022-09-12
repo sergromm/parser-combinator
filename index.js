@@ -241,5 +241,17 @@ const manyOne = (parser) =>
     return upadateParserResult(nextState, results);
   });
 
-const parser = many(choice([digits, letters]));
-console.log(parser.run('asd123'));
+const between = (leftParser, rightParser) => (contentParser) =>
+  sequenceOf([leftParser, contentParser, rightParser]).map(
+    ([_, result]) => result
+  );
+
+const betweenBrackets = between(str('('), str(')'));
+
+const parser = betweenBrackets(letters);
+
+const stringResult = { type: 'string', value: 'hello' };
+const numberResult = { type: 'number', value: 42 };
+const dicerollResult = { type: 'diceroll', value: [2, 8] };
+
+console.log(parser.run('(hello)'));
