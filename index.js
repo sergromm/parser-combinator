@@ -43,6 +43,19 @@ class Parser {
     });
   }
 
+  chain(fn) {
+    return new Parser((parserState) => {
+      const nextState = this.parserStateTransformerFn(parserState);
+
+      if (nextState.isError) {
+        return nextState;
+      }
+
+      const nextParser = fn(nextState.result);
+      return nextParser.parserStateTransformerFn(nextState);
+    });
+  }
+
   errorMap(fn) {
     return new Parser((parserState) => {
       const nextState = this.parserStateTransformerFn(parserState);
@@ -246,12 +259,32 @@ const between = (leftParser, rightParser) => (contentParser) =>
     ([_, result]) => result
   );
 
-const betweenBrackets = between(str('('), str(')'));
+const stringParser = letters.map((result) => ({
+  type: 'string',
+  value: result,
+}));
 
-const parser = betweenBrackets(letters);
+const numberParser = digits.map((result) => ({
+  type: 'number',
+  value: Number(result),
+}));
 
-const stringResult = { type: 'string', value: 'hello' };
-const numberResult = { type: 'number', value: 42 };
-const dicerollResult = { type: 'diceroll', value: [2, 8] };
+const dicerollParser = sequenceOf([digits, str('d'), digits]).map(
+  ([number, _, sides]) => ({
+    type: 'diceroll',
+    value: [Number(number), Number(sides)],
+  })
+);
 
-console.log(parser.run('(hello)'));
+const parser = sequenceOf([letters, str(':')])
+  .map(([result]) => result)
+  .chain((type) => {
+    if (type === 'string') {
+      return stringParser;
+    } else if (type === 'number') {
+      return numberParser;
+    }
+    return dicerollParser;
+  });
+
+console.log(parser.run('diceroll:2d6'));
