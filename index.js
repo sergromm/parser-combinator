@@ -1,15 +1,15 @@
-const upadateParserState = (state, index, result) => ({
+const updateParserState = (state, index, result) => ({
   ...state,
   index,
   result,
 });
 
-const upadateParserResult = (state, result) => ({
+const updateParserResult = (state, result) => ({
   ...state,
   result,
 });
 
-const upadateParserError = (state, errorMessage) => ({
+const updateParserError = (state, errorMessage) => ({
   ...state,
   isError: true,
   error: errorMessage,
@@ -39,7 +39,7 @@ class Parser {
         return nextState;
       }
 
-      return upadateParserResult(nextState, fn(nextState.result));
+      return updateParserResult(nextState, fn(nextState.result));
     });
   }
 
@@ -64,10 +64,7 @@ class Parser {
         return nextState;
       }
 
-      return upadateParserError(
-        nextState,
-        fn(nextState.error, nextState.index)
-      );
+      return updateParserError(nextState, fn(nextState.error, nextState.index));
     });
   }
 }
@@ -83,17 +80,17 @@ const str = (s) =>
     const slicedTarget = targetString.slice(index);
 
     if (slicedTarget.length === 0) {
-      return upadateParserError(
+      return updateParserError(
         parserState,
         `str: Tried to match ${s}, but got unexpected end of input.`
       );
     }
 
     if (slicedTarget.startsWith(s)) {
-      return upadateParserState(parserState, index + s.length, s);
+      return updateParserState(parserState, index + s.length, s);
     }
 
-    return upadateParserError(
+    return updateParserError(
       parserState,
       `Tried to match ${s}, but got ${targetString.slice(index, index + 10)}`
     );
@@ -111,7 +108,7 @@ const letters = new Parser((parserState) => {
   const slicedTarget = targetString.slice(index);
 
   if (slicedTarget.length === 0) {
-    return upadateParserError(
+    return updateParserError(
       parserState,
       `letters: Got unexpected end of input.`
     );
@@ -120,14 +117,14 @@ const letters = new Parser((parserState) => {
   const regexMatch = slicedTarget.match(lettersRegex);
 
   if (regexMatch) {
-    return upadateParserState(
+    return updateParserState(
       parserState,
       index + regexMatch[0].length,
       regexMatch[0]
     );
   }
 
-  return upadateParserError(
+  return updateParserError(
     parserState,
     `letters: Couldn't match lettres @ index ${index}`
   );
@@ -145,7 +142,7 @@ const digits = new Parser((parserState) => {
   const slicedTarget = targetString.slice(index);
 
   if (slicedTarget.length === 0) {
-    return upadateParserError(
+    return updateParserError(
       parserState,
       `digits: Got unexpected end of input.`
     );
@@ -154,14 +151,14 @@ const digits = new Parser((parserState) => {
   const regexMatch = slicedTarget.match(digitsRegex);
 
   if (regexMatch) {
-    return upadateParserState(
+    return updateParserState(
       parserState,
       index + regexMatch[0].length,
       regexMatch[0]
     );
   }
 
-  return upadateParserError(
+  return updateParserError(
     parserState,
     `digits: Couldn't match digits @ index ${index}`
   );
@@ -180,7 +177,7 @@ const sequenceOf = (parsers) =>
       results.push(nextState.result);
     }
 
-    return upadateParserResult(nextState, results);
+    return updateParserResult(nextState, results);
   });
 
 const choice = (parsers) =>
@@ -196,7 +193,7 @@ const choice = (parsers) =>
       }
     }
 
-    return upadateParserError(
+    return updateParserError(
       parserState,
       `choice: Unabled to match with any parser @ index ${parserState.index}`
     );
@@ -222,7 +219,7 @@ const many = (parser) =>
       }
     }
 
-    return upadateParserResult(nextState, results);
+    return updateParserResult(nextState, results);
   });
 
 const manyOne = (parser) =>
@@ -245,13 +242,13 @@ const manyOne = (parser) =>
     }
 
     if (results.length === 0) {
-      return upadateParserError(
+      return updateParserError(
         parserState,
         `manyOne: unable to match any input using parser @ index ${parserState.index}`
       );
     }
 
-    return upadateParserResult(nextState, results);
+    return updateParserResult(nextState, results);
   });
 
 const between = (leftParser, rightParser) => (contentParser) =>
@@ -276,15 +273,91 @@ const dicerollParser = sequenceOf([digits, str('d'), digits]).map(
   })
 );
 
-const parser = sequenceOf([letters, str(':')])
-  .map(([result]) => result)
-  .chain((type) => {
-    if (type === 'string') {
-      return stringParser;
-    } else if (type === 'number') {
-      return numberParser;
+const sepBy = (seporatorParser) => (valueParser) =>
+  new Parser((parserState) => {
+    const results = [];
+    let nextState = parserState;
+
+    while (true) {
+      const thingWeWantState = valueParser.parserStateTransformerFn(nextState);
+
+      if (thingWeWantState.isError) {
+        break;
+      }
+      results.push(thingWeWantState.result);
+      nextState = thingWeWantState;
+
+      const separatorState =
+        seporatorParser.parserStateTransformerFn(nextState);
+      if (separatorState.isError) {
+        break;
+      }
+      nextState = separatorState;
     }
-    return dicerollParser;
+
+    return updateParserResult(nextState, results);
   });
 
-console.log(parser.run('diceroll:2d6'));
+const sepByOne = (seporatorParser) => (valueParser) =>
+  new Parser((parserState) => {
+    const results = [];
+    let nextState = parserState;
+
+    while (true) {
+      const thingWeWantState = valueParser.parserStateTransformerFn(nextState);
+
+      if (thingWeWantState.isError) {
+        break;
+      }
+      results.push(thingWeWantState.result);
+      nextState = thingWeWantState;
+
+      const separatorState =
+        seporatorParser.parserStateTransformerFn(nextState);
+      if (separatorState.isError) {
+        break;
+      }
+      nextState = separatorState;
+    }
+
+    if (results.length === 0) {
+      return updateParserError(
+        parserState,
+        `sepByOne: Unable to capture any results @ index ${parserState.index}`
+      );
+    }
+
+    return updateParserResult(nextState, results);
+  });
+
+const lazy = (parserThunk) =>
+  new Parser((parserState) => {
+    const parser = parserThunk;
+    return parser.parserStateTransformerFn(parserState);
+  });
+
+const betweenSquareBrackets = between(str('['), str(']'));
+const commaSeparated = sepBy(str(','));
+
+// lazily evaluate to workaround JS's "Used before defined" problem.
+const value = lazy(() => choice([digits, arrayParser]));
+
+const arrayParser = betweenSquareBrackets(commaSeparated(value));
+
+const example = '[1,[2,[3],4],5]';
+
+console.dir(arrayParser.run(example));
+
+module.exports = {
+  str,
+  letters,
+  digits,
+  sequenceOf,
+  choice,
+  many,
+  manyOne,
+  between,
+  sepBy,
+  sepByOne,
+  lazy,
+};
