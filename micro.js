@@ -1,4 +1,4 @@
-const { str, digits, choice, between, sequenceOf, lazy } = require('../index.js');
+const { str, digits, choice, between, sequenceOf, lazy } = require('./lib.js');
 
 const betweenBrackets = between(str('('), str(')'));
 
