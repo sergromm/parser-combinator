@@ -6,6 +6,8 @@ const {
 	succeed,
 	fail,
 } = require('./lib');
+const fs = require('fs');
+const path = require('path');
 
 const Bit = new Parser((parserState) => {
 	if (parserState.isError) {
@@ -77,16 +79,16 @@ const One = new Parser((parserState) => {
 
 const Uint = (n) => {
 	if (n < 1) {
-		throw new Error(`Uint: n must be larger than 0, but got ${n}`);
+		throw new Error(`Uint: n must be larger than 0, but we got ${n}`);
 	}
 
 	if (n > 32) {
-		throw new Error(`Uint: n must be less than 32, but got ${n}`);
+		throw new Error(`Uint: n must be less than 32, but we got ${n}`);
 	}
 
 	return sequenceOf(Array.from({ length: n }, () => Bit)).map((bits) => {
 		return bits.reduce((acc, bit, i) => {
-			return acc + (bit << (n - 1 - i));
+			return acc + Number(BigInt(bit) << BigInt(n - 1 - i));
 		}, 0);
 	});
 };
@@ -140,10 +142,26 @@ const RawString = (s) => {
 	return sequenceOf(byteParesers);
 };
 
-const parser = RawString('Hello worlz!');
+const tag = (type) => (value) => ({ type, value });
+const parser = sequenceOf([
+	Uint(4).map(tag('Version')),
+	Uint(4).map(tag('IHL')),
+	Uint(6).map(tag('DSCP')),
+	Uint(2).map(tag('ECN')),
+	Uint(16).map(tag('Total Length')),
+	Uint(16).map(tag('Identification')),
+	Uint(3).map(tag('Flags')),
+	Uint(13).map(tag('Fragment Offset')),
+	Uint(8).map(tag('Time To Live')),
+	Uint(8).map(tag('Protocol')),
+	Uint(16).map(tag('Header Checksum')),
+	Uint(32).map(tag('Source Address')),
+	Uint(32).map(tag('Destintaion IP Adress')),
+]);
 
-const data = new Uint8Array('Hello world!'.split('').map((c) => c.charCodeAt(0))).buffer;
-const dataView = new DataView(data);
+const file = fs.readFileSync(path.join(__dirname, './packet.bin'));
+const fileBuffer = file.buffer;
+const dataView = new DataView(file.buffer, file.byteOffset, file.byteLength);
 const res = parser.run(dataView);
 
 console.log(res);
