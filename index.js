@@ -1,4 +1,11 @@
-const { Parser, updateParserError, updateParserState, sequenceOf } = require('./lib');
+const {
+	Parser,
+	updateParserError,
+	updateParserState,
+	sequenceOf,
+	succeed,
+	fail,
+} = require('./lib');
 
 const Bit = new Parser((parserState) => {
 	if (parserState.isError) {
@@ -68,9 +75,74 @@ const One = new Parser((parserState) => {
 	return updateParserState(parserState, parserState.index + 1, result);
 });
 
-const parser = sequenceOf([One, One, One, Zero, One, Zero, One, Zero]);
+const Uint = (n) => {
+	if (n < 1) {
+		throw new Error(`Uint: n must be larger than 0, but got ${n}`);
+	}
 
-const data = new Uint8Array([234, 235]).buffer;
+	if (n > 32) {
+		throw new Error(`Uint: n must be less than 32, but got ${n}`);
+	}
+
+	return sequenceOf(Array.from({ length: n }, () => Bit)).map((bits) => {
+		return bits.reduce((acc, bit, i) => {
+			return acc + (bit << (n - 1 - i));
+		}, 0);
+	});
+};
+
+const Int = (n) => {
+	if (n < 1) {
+		throw new Error(`Int: n must be larger than 0, but got ${n}`);
+	}
+
+	if (n > 32) {
+		throw new Error(`Int: n must be less than 32, but got ${n}`);
+	}
+
+	return sequenceOf(Array.from({ length: n }, () => Bit)).map((bits) => {
+		if (bits[0] === 0) {
+			return bits.reduce((acc, bit, i) => {
+				return acc + Number(BigInt(bit) << BigInt(n - 1 - i));
+			}, 0);
+		} else {
+			return -(
+				1 +
+				bits.reduce((acc, bit, i) => {
+					return acc + Number(BigInt(bit === 0 ? 1 : 0) << BigInt(n - 1 - i));
+				}, 0)
+			);
+		}
+	});
+};
+const RawString = (s) => {
+	if (s.length < 1) {
+		throw new Error(`RawString: s must be at least 1 character`);
+	}
+
+	const byteParesers = s
+		.split('')
+		.map((c) => c.charCodeAt(0))
+		.map((n) => {
+			return Uint(8).chain((res) => {
+				if (res === n) {
+					return succeed(n);
+				} else {
+					return fail(
+						`RawString: Expected character ${String.fromCharCode(n)}, but got ${String.fromCharCode(
+							res,
+						)}`,
+					);
+				}
+			});
+		});
+
+	return sequenceOf(byteParesers);
+};
+
+const parser = RawString('Hello worlz!');
+
+const data = new Uint8Array('Hello world!'.split('').map((c) => c.charCodeAt(0))).buffer;
 const dataView = new DataView(data);
 const res = parser.run(dataView);
 

@@ -318,17 +318,15 @@ const lazy = (parserThunk) =>
 		return parser.parserStateTransformerFn(parserState);
 	});
 
-const betweenSquareBrackets = between(str('['), str(']'));
-const commaSeparated = sepBy(str(','));
+const fail = (errMsg) =>
+	new Parser((parserState) => {
+		return updateParserError(parserState, errMsg);
+	});
 
-// lazily evaluate to workaround JS's "Used before defined" problem.
-const value = lazy(() => choice([digits, arrayParser]));
-
-const arrayParser = betweenSquareBrackets(commaSeparated(value));
-
-const example = '[1,[2,[3],4],5]';
-
-console.dir(arrayParser.run(example));
+const succeed = (value) =>
+	new Parser((parserState) => {
+		return updateParserResult(parserState, value);
+	});
 
 module.exports = {
 	str,
@@ -343,6 +341,8 @@ module.exports = {
 	sepByOne,
 	lazy,
 	Parser,
+	fail,
+	succeed,
 	updateParserError,
 	updateParserState,
 	updateParserResult,
