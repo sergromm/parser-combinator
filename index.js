@@ -157,11 +157,27 @@ const parser = sequenceOf([
 	Uint(16).map(tag('Header Checksum')),
 	Uint(32).map(tag('Source Address')),
 	Uint(32).map(tag('Destintaion IP Adress')),
-]);
+]).chain((res) => {
+	if (res[1].value > 5) {
+		const remainingBytes = Array.from({ length: res[1].value - 20 }, () => Uint(8));
+		return sequenceOf(remainingBytes).map((remaining) => [...res, tag('Options')(remaining)]);
+	}
+	return succeed(res);
+});
 
 const file = fs.readFileSync(path.join(__dirname, './packet.bin'));
-const fileBuffer = file.buffer;
 const dataView = new DataView(file.buffer, file.byteOffset, file.byteLength);
 const res = parser.run(dataView);
 
-console.log(res);
+const decodeIp = (number) => {
+	return number
+		.toString(16)
+		.match(/.{1,2}/g)
+		.map((h) => '0x' + h)
+		.map((h) => parseInt(h));
+};
+
+const result = res.result;
+const source = result[result.length - 2].value;
+
+console.log(decodeIp(source));
